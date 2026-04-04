@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FALLBACK_SESSION_ID } from '../config/demo';
 import { useSessionReport } from '../hooks/useSessionReport';
-import { formatClockLabel } from '../utils/report';
+import { REPORT_GENERATION_STEPS, formatClockLabel } from '../utils/report';
 
 interface SessionReportPageProps {
   sessionId: string;
@@ -37,6 +37,19 @@ export function SessionReportPage({ sessionId, onSessionIdChange, onBack }: Sess
       `task: ${report.derived?.overview.taskTitle ?? report.data.task?.title ?? '未命名任务'}`,
       `开始时间: ${formatClockLabel(report.data.session.start_time)}`,
     ];
+  }, [report.data, report.derived]);
+
+  const reportProcessCaption = useMemo(() => {
+    if (!report.data || !report.derived) {
+      return '这份复盘会直接读取本地已记录的 session 数据、特征快照和状态结果，再即时聚合成结论。';
+    }
+
+    const eventCountLabel =
+      typeof report.derived.overview.eventCount === 'number'
+        ? `${report.derived.overview.eventCount} 条行为事件`
+        : '本地行为事件';
+
+    return `为什么生成很快：这份复盘不是现编现猜，而是直接读取 session ${report.data.session.session_id} 已记录的 ${eventCountLabel}、${report.derived.overview.snapshotCount} 个特征快照和 ${report.derived.overview.stateCount} 个状态点，在本地即时聚合成时间线、转折点和建议。`;
   }, [report.data, report.derived]);
 
   return (
@@ -109,6 +122,30 @@ export function SessionReportPage({ sessionId, onSessionIdChange, onBack }: Sess
       {report.data && report.derived ? (
         <main className="report-layout">
           <section className="report-main">
+            <section className="panel report-process-panel">
+              <div className="section-header">
+                <div>
+                  <p className="eyebrow">复盘如何生成</p>
+                  <h2>它来自这次学习过程，不是瞬间拍脑袋</h2>
+                </div>
+              </div>
+
+              <p className="report-process-caption">{reportProcessCaption}</p>
+
+              <div className="report-process-flow" aria-label="复盘生成流程">
+                {REPORT_GENERATION_STEPS.map((processStep) => (
+                  <article key={processStep.step} className="report-process-step">
+                    <div className="report-process-step-head">
+                      <span className="report-process-step-index">{processStep.step}</span>
+                      <strong>{processStep.title}</strong>
+                    </div>
+                    <p>{processStep.description}</p>
+                    <span className="report-process-step-hint">{processStep.dataHint}</span>
+                  </article>
+                ))}
+              </div>
+            </section>
+
             <section className="panel">
               <div className="section-header">
                 <div>

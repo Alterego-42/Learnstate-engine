@@ -390,6 +390,69 @@ h2 {
   font-size: 13px;
 }
 
+.report-process-panel {
+  background:
+    linear-gradient(180deg, rgba(30, 41, 59, 0.88), rgba(15, 23, 42, 0.78)),
+    rgba(15, 23, 42, 0.78);
+}
+
+.report-process-caption {
+  margin: 14px 0 0;
+  color: #d6def4;
+  line-height: 1.7;
+}
+
+.report-process-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.report-process-step {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(30, 41, 59, 0.58);
+}
+
+.report-process-step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.report-process-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(125, 211, 252, 0.14);
+  color: #7dd3fc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-process-step strong {
+  color: #f8fafc;
+}
+
+.report-process-step p {
+  margin: 12px 0 0;
+  color: #d6def4;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.report-process-step-hint {
+  display: block;
+  margin-top: 12px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .timeline-list {
   display: flex;
   flex-direction: column;

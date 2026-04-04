@@ -110,6 +110,13 @@ export interface DerivedSessionReport {
   recommendations: DerivedRecommendation[];
 }
 
+export interface ReportGenerationStep {
+  step: string;
+  title: string;
+  description: string;
+  dataHint: string;
+}
+
 const STATE_META: Record<string, StateMeta> = {
   steady_flow: { label: '稳定推进', group: '推进' },
   efficient_flow: { label: '高效推进', group: '推进' },
@@ -159,6 +166,33 @@ const BLOCKER_TEMPLATES: Record<BlockerType, string> = {
   long_idle: '先写下当前卡点，再开始下一步。',
   chaotic_trial: '下一轮只保留一种尝试方向。',
 };
+
+export const REPORT_GENERATION_STEPS: ReportGenerationStep[] = [
+  {
+    step: '01',
+    title: '采集学习行为',
+    description: '记录编辑、运行、停顿、回退等学习动作，先把这次 session 的过程留下来。',
+    dataHint: '来自本地 raw_events / summary',
+  },
+  {
+    step: '02',
+    title: '形成时间窗口特征快照',
+    description: '把连续行为整理成一段段窗口特征，例如尝试频率、停顿占比、回退强度。',
+    dataHint: '来自 feature_snapshots',
+  },
+  {
+    step: '03',
+    title: '本地推理状态变化',
+    description: '根据每个窗口的特征，推断当时更像稳定推进、探索、卡住还是注意力下降。',
+    dataHint: '来自 state_vectors',
+  },
+  {
+    step: '04',
+    title: '聚合成复盘结论与建议',
+    description: '按时间线提炼主状态、关键转折点、主要阻滞，并给出下一轮可执行建议。',
+    dataHint: '由当前页面即时聚合',
+  },
+];
 
 function safeParseJson(value: unknown): unknown {
   if (typeof value !== 'string') {
