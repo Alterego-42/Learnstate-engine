@@ -18,6 +18,7 @@ type BlockerType =
 interface StateMeta {
   label: string;
   group: ReportStateGroup;
+  description: string;
 }
 
 interface NormalizedStatePoint {
@@ -46,6 +47,9 @@ export interface DerivedTimelineNode {
   stateGroup: ReportStateGroup;
   primaryStateKey: string;
   primaryStateLabel: string;
+  stateDescription: string;
+  stageTitle: string;
+  stageSummary: string;
   secondaryStateKey: string | null;
   avgConfidence: number;
   confidenceLabel: string;
@@ -72,6 +76,7 @@ export interface DerivedTurningPoint {
 export interface DerivedBlocker {
   type: BlockerType;
   label: string;
+  description: string;
   severity: 'low' | 'medium' | 'high';
   durationSec: number;
   durationLabel: string;
@@ -100,6 +105,10 @@ export interface DerivedSessionOverview {
   turningPointCount: number;
   primaryBlockerLabel: string | null;
   primaryBlockerReason: string | null;
+  overallSummary: string;
+  blockerSummary: string;
+  endingSummary: string;
+  sampleHint: string | null;
 }
 
 export interface DerivedSessionReport {
@@ -118,35 +127,21 @@ export interface ReportGenerationStep {
 }
 
 const STATE_META: Record<string, StateMeta> = {
-  steady_flow: { label: '稳定推进', group: '推进' },
-  efficient_flow: { label: '高效推进', group: '推进' },
-  careful_progression: { label: '谨慎推进', group: '推进' },
-  local_debugging: { label: '局部调试', group: '探索' },
-  branch_exploration: { label: '分支探索', group: '探索' },
-  probing_edits: { label: '试探性修改', group: '探索' },
-  minor_stuck: { label: '轻度卡顿', group: '阻滞' },
-  looping: { label: '反复回退', group: '阻滞' },
-  structural_stuck: { label: '结构性卡住', group: '阻滞' },
-  chaotic_trial: { label: '高频试错', group: '混乱' },
-  ineffective_attempts: { label: '无效尝试', group: '混乱' },
-  strategy_drift: { label: '策略漂移', group: '混乱' },
-  short_pause: { label: '短暂停顿', group: '注意力' },
-  deep_thinking: { label: '深度思考', group: '注意力' },
-  attention_drop: { label: '注意力下降', group: '注意力' },
-};
-
-const FEATURE_LABELS: Record<string, string> = {
-  stability: '稳定性',
-  exploration: '探索性',
-  friction: '阻滞',
-  rhythm: '节奏',
-  backtrack_loop_score: '回退循环',
-  delete_ratio: '删除占比',
-  attempt_frequency: '尝试频率',
-  attempt_freq_per_min: '尝试频率',
-  long_pause_ratio: '长暂停',
-  pause_ratio: '停顿占比',
-  branch_switch_score: '分支切换',
+  steady_flow: { label: '稳定推进', group: '推进', description: '已经找到方向，主要在持续往前做。' },
+  efficient_flow: { label: '高效推进', group: '推进', description: '方向清楚，推进速度也比较快。' },
+  careful_progression: { label: '谨慎推进', group: '推进', description: '边验证边前进，整体仍然在推进。' },
+  local_debugging: { label: '局部调试', group: '探索', description: '在局部位置排查问题，试着找到具体原因。' },
+  branch_exploration: { label: '分支探索', group: '探索', description: '在不同思路之间比较，寻找更合适的做法。' },
+  probing_edits: { label: '试探性修改', group: '探索', description: '通过小步修改试出更有效的方向。' },
+  minor_stuck: { label: '轻度卡顿', group: '阻滞', description: '遇到小卡点，但还在靠近答案。' },
+  looping: { label: '反复回退', group: '阻滞', description: '在相似动作里来回试，推进效率开始下降。' },
+  structural_stuck: { label: '结构性卡住', group: '阻滞', description: '当前方法本身走不通，需要换一条验证路径。' },
+  chaotic_trial: { label: '高频试错', group: '混乱', description: '尝试很多但不够收敛，学习路径变散了。' },
+  ineffective_attempts: { label: '无效尝试', group: '混乱', description: '做了不少尝试，但有效信息还不多。' },
+  strategy_drift: { label: '策略漂移', group: '混乱', description: '目标开始跑偏，需要重新收束。' },
+  short_pause: { label: '短暂停顿', group: '注意力', description: '先停一下整理，不一定是坏事。' },
+  deep_thinking: { label: '深度思考', group: '注意力', description: '在集中想关键步骤，常发生在转折前。' },
+  attention_drop: { label: '注意力下降', group: '注意力', description: '注意力开始下滑，容易失去节奏。' },
 };
 
 const BLOCKER_LABELS: Record<BlockerType, string> = {
@@ -158,13 +153,22 @@ const BLOCKER_LABELS: Record<BlockerType, string> = {
   chaotic_trial: '高频试错',
 };
 
+const BLOCKER_DESCRIPTIONS: Record<BlockerType, string> = {
+  looping_backtrack: '在同一类办法上来回试，迟迟没有形成新进展。',
+  structural_stuck: '当前做法的关键路径不通，需要换一种拆解方式。',
+  minor_stuck: '有卡顿，但问题范围还比较局部。',
+  attention_drop: '注意力和节奏开始下滑，容易越做越散。',
+  long_idle: '停住时间偏长，说明下一步还没有想清楚。',
+  chaotic_trial: '尝试很多、切换频繁，但没有形成稳定方向。',
+};
+
 const BLOCKER_TEMPLATES: Record<BlockerType, string> = {
-  looping_backtrack: '先锁定一个子问题，再继续改。',
-  structural_stuck: '先换成更小的验证路径。',
-  minor_stuck: '先确认当前假设，再决定要不要继续试。',
-  attention_drop: '先收敛目标，只做一个最小动作。',
-  long_idle: '先写下当前卡点，再开始下一步。',
-  chaotic_trial: '下一轮只保留一种尝试方向。',
+  looping_backtrack: '先固定一个小问题。',
+  structural_stuck: '换一条更小的验证路径。',
+  minor_stuck: '先写下当前假设。',
+  attention_drop: '先收回目标，只做一步。',
+  long_idle: '先记下卡点，再继续。',
+  chaotic_trial: '只保留一种尝试方向。',
 };
 
 export const REPORT_GENERATION_STEPS: ReportGenerationStep[] = [
@@ -208,6 +212,10 @@ function safeParseJson(value: unknown): unknown {
 
 function humanizeStateKey(stateKey: string): string {
   return STATE_META[stateKey]?.label ?? stateKey.replaceAll('_', ' ');
+}
+
+function describeStateKey(stateKey: string): string {
+  return STATE_META[stateKey]?.description ?? '这段记录说明学习过程发生了变化。';
 }
 
 function getStateGroup(stateKey: string): ReportStateGroup {
@@ -266,6 +274,46 @@ function confidenceToLabel(confidence: number): string {
   return '低';
 }
 
+function looksLikeGarbledText(text: string): boolean {
+  const mojibakeMatches = text.match(/[ÃÂÆÐÑØåæçéèêïîôöùû¼½¾�]/g) ?? [];
+  return mojibakeMatches.length >= Math.max(3, Math.floor(text.length / 6));
+}
+
+function looksLikeTechnicalText(text: string): boolean {
+  return /[a-z]+_[a-z]+/i.test(text) || /因此判断为|次高状态为/u.test(text);
+}
+
+function cleanSentence(text: string): string {
+  return text.trim().replace(/[。；;,.!！?？]+$/u, '');
+}
+
+function humanizeEvidenceItem(feature: string, direction: string): string | null {
+  switch (feature) {
+    case 'stability':
+      return direction === 'down' ? '思路不够稳' : '思路比较稳';
+    case 'exploration':
+      return direction === 'down' ? '尝试范围比较收敛' : '在尝试不同办法';
+    case 'friction':
+      return direction === 'down' ? '推进阻力较小' : '推进阻力较大';
+    case 'rhythm':
+      return direction === 'down' ? '节奏有些断' : '节奏比较顺';
+    case 'backtrack_loop_score':
+      return direction === 'down' ? '没有明显来回回退' : '出现来回回退';
+    case 'delete_ratio':
+      return direction === 'down' ? '改动比较稳定' : '频繁推翻刚写的内容';
+    case 'attempt_frequency':
+    case 'attempt_freq_per_min':
+      return direction === 'down' ? '尝试节奏比较稳定' : '尝试切换较频繁';
+    case 'long_pause_ratio':
+    case 'pause_ratio':
+      return direction === 'down' ? '停顿不多' : '停下来思考的时间较多';
+    case 'branch_switch_score':
+      return direction === 'down' ? '思路切换不多' : '在不同思路间频繁切换';
+    default:
+      return null;
+  }
+}
+
 function readTopStateKey(item: TopStateResponse | undefined): string {
   const raw = item?.state_key ?? item?.stateKey ?? item?.key ?? item?.label ?? item?.name ?? 'unknown';
   return String(raw);
@@ -277,13 +325,18 @@ function extractEvidenceTexts(value: unknown): string[] {
 
   if (typeof parsed === 'string') {
     const text = parsed.trim();
-    return text ? [text] : [];
+    return text && !looksLikeGarbledText(text) && !looksLikeTechnicalText(text) ? [cleanSentence(text)] : [];
   }
 
   if (parsed && typeof parsed === 'object') {
     const payload = parsed as Record<string, unknown>;
-    if (typeof payload.short_text === 'string' && payload.short_text.trim()) {
-      texts.push(payload.short_text.trim());
+    if (
+      typeof payload.short_text === 'string' &&
+      payload.short_text.trim() &&
+      !looksLikeGarbledText(payload.short_text) &&
+      !looksLikeTechnicalText(payload.short_text)
+    ) {
+      texts.push(cleanSentence(payload.short_text));
     }
 
     const evidenceItems = Array.isArray(payload.evidence_items) ? payload.evidence_items : [];
@@ -293,15 +346,59 @@ function extractEvidenceTexts(value: unknown): string[] {
       }
       const feature = String((item as Record<string, unknown>).feature ?? '');
       const direction = String((item as Record<string, unknown>).direction ?? '');
-      const label = FEATURE_LABELS[feature] ?? feature;
+      const label = humanizeEvidenceItem(feature, direction);
       if (!label) {
         continue;
       }
-      texts.push(`${label}${direction === 'down' ? '偏低' : '偏高'}`);
+      texts.push(label);
     }
   }
 
   return Array.from(new Set(texts)).slice(0, 3);
+}
+
+function getStageTitle(stateGroup: ReportStateGroup, stateKey: string): string {
+  switch (stateGroup) {
+    case '推进':
+      return '顺利推进阶段';
+    case '探索':
+      return stateKey === 'branch_exploration' ? '比较思路阶段' : '定位问题阶段';
+    case '阻滞':
+      return stateKey === 'structural_stuck' ? '方法卡住阶段' : '卡住阶段';
+    case '混乱':
+      return '试错过多阶段';
+    case '注意力':
+      return stateKey === 'attention_drop' ? '节奏下滑阶段' : '停下来整理阶段';
+    default:
+      return '过程记录阶段';
+  }
+}
+
+function buildStageSummary(
+  stateGroup: ReportStateGroup,
+  primaryStateKey: string,
+  blockerLabel: string | null,
+  evidenceSummary: string[],
+): string {
+  const lead = cleanSentence(evidenceSummary[0] ?? '');
+  const stateDescription = cleanSentence(describeStateKey(primaryStateKey));
+
+  if (blockerLabel) {
+    return `这段主要卡在${blockerLabel}，${lead || stateDescription}。`;
+  }
+
+  switch (stateGroup) {
+    case '推进':
+      return `这段整体在往前推进，${lead || stateDescription}。`;
+    case '探索':
+      return `这段主要在定位问题，${lead || stateDescription}。`;
+    case '混乱':
+      return `这段尝试较多但不够收敛，${lead || stateDescription}。`;
+    case '注意力':
+      return `这段更像在停下来整理，${lead || stateDescription}。`;
+    default:
+      return `这段过程变化较明显，${lead || stateDescription}。`;
+  }
 }
 
 function inferBlockerFromState(stateKey: string): BlockerType | null {
@@ -362,6 +459,7 @@ function summarizeSnapshotBlocker(snapshots: SnapshotResponse[]): DerivedBlocker
       return {
         type,
         label: BLOCKER_LABELS[type],
+        description: BLOCKER_DESCRIPTIONS[type],
         severity: windows.length >= 2 ? 'medium' : 'low',
         durationSec,
         durationLabel: formatDurationLabel(durationSec),
@@ -447,9 +545,18 @@ function buildTimeline(points: NormalizedStatePoint[]): DerivedTimelineNode[] {
         existing.blockerType = point.blockerType;
         existing.blockerLabel = BLOCKER_LABELS[point.blockerType];
       }
+      existing.stateDescription = describeStateKey(existing.primaryStateKey);
+      existing.stageTitle = getStageTitle(existing.stateGroup, existing.primaryStateKey);
+      existing.stageSummary = buildStageSummary(
+        existing.stateGroup,
+        existing.primaryStateKey,
+        existing.blockerLabel,
+        existing.evidenceSummary,
+      );
       continue;
     }
 
+    const blockerLabel = point.blockerType ? BLOCKER_LABELS[point.blockerType] : null;
     timeline.push({
       nodeId: point.id,
       startTime: point.startTime,
@@ -459,13 +566,16 @@ function buildTimeline(points: NormalizedStatePoint[]): DerivedTimelineNode[] {
       stateGroup: point.stateGroup,
       primaryStateKey: point.primaryStateKey,
       primaryStateLabel: point.primaryStateLabel,
+      stateDescription: describeStateKey(point.primaryStateKey),
+      stageTitle: getStageTitle(point.stateGroup, point.primaryStateKey),
+      stageSummary: buildStageSummary(point.stateGroup, point.primaryStateKey, blockerLabel, point.evidenceSummary),
       secondaryStateKey: point.secondaryStateKey,
       avgConfidence: point.confidence,
       confidenceLabel: confidenceToLabel(point.confidence),
       evidenceSummary: point.evidenceSummary,
       snapshotRefs: point.snapshotId ? [point.snapshotId] : [],
       blockerType: point.blockerType,
-      blockerLabel: point.blockerType ? BLOCKER_LABELS[point.blockerType] : null,
+      blockerLabel,
       isTurningPoint: false,
       sampleCount: 1,
     });
@@ -526,11 +636,14 @@ function buildTurningPoints(timeline: DerivedTimelineNode[]): DerivedTurningPoin
       type,
       title:
         type === 'downturn'
-          ? `从${before.primaryStateLabel}转入${after.primaryStateLabel}`
+          ? '在这里开始卡住'
           : type === 'recovery'
-            ? `从${before.primaryStateLabel}回到${after.primaryStateLabel}`
-            : `从${before.primaryStateLabel}切到${after.primaryStateLabel}`,
-      reason: after.evidenceSummary[0] ?? before.evidenceSummary[0] ?? '状态重心发生变化',
+            ? '在这里重新找回推进'
+            : '在这里换了一种学习办法',
+      reason:
+        after.evidenceSummary[0] ??
+        before.evidenceSummary[0] ??
+        `从${before.primaryStateLabel}变化到${after.primaryStateLabel}`,
       beforeState: before.primaryStateLabel,
       afterState: after.primaryStateLabel,
       timeLabel: after.timeLabel,
@@ -545,9 +658,9 @@ function buildTurningPoints(timeline: DerivedTimelineNode[]): DerivedTurningPoin
       nodeId: firstNode.nodeId,
       type: firstNode.blockerType ? 'downturn' : 'strategy_shift',
       title: firstNode.blockerType
-        ? `一开始就进入${firstNode.primaryStateLabel}`
-        : `本次 session 主要处于${firstNode.primaryStateLabel}`,
-      reason: firstNode.evidenceSummary[0] ?? '首段状态已体现本次 session 主特征',
+        ? '一开始就进入卡点'
+        : '这次过程整体比较平稳',
+      reason: firstNode.evidenceSummary[0] ?? `开场主要表现为${firstNode.primaryStateLabel}`,
       beforeState: '开始',
       afterState: firstNode.primaryStateLabel,
       timeLabel: firstNode.timeLabel,
@@ -604,6 +717,7 @@ function buildBlockers(
       return {
         type,
         label: BLOCKER_LABELS[type],
+        description: BLOCKER_DESCRIPTIONS[type],
         severity,
         durationSec: value.durationSec,
         durationLabel: formatDurationLabel(value.durationSec),
@@ -643,10 +757,10 @@ function buildRecommendations(
     }
     const text =
       turningPoint.type === 'recovery'
-        ? '刚才有效，沿这条路径继续细化。'
+        ? '沿刚才有效的方法继续。'
         : turningPoint.type === 'downturn'
-          ? '转折后先停一下，先确认下一步要验证什么。'
-          : '下一轮先定一种推进路径。';
+          ? '先停下，只验证下一步。'
+          : '先选一条路，不要同时试。';
 
     if (!usedTexts.has(text)) {
       usedTexts.add(text);
@@ -661,7 +775,7 @@ function buildRecommendations(
   }
 
   if (recommendations.length < 2) {
-    const fallbackText = blockers.length > 0 ? '先处理最重的阻滞段，再继续推进。' : '先沿最稳定的一段继续展开。';
+    const fallbackText = blockers.length > 0 ? '先解决最卡的一处。' : '沿最顺的一段继续。';
     if (!usedTexts.has(fallbackText)) {
       recommendations.push({
         id: 'fallback',
@@ -698,6 +812,81 @@ function readEventCount(summary: Record<string, unknown> | null): number | null 
   return typeof raw === 'number' ? raw : null;
 }
 
+function buildSampleHint(stateCount: number, snapshotCount: number): string | null {
+  if (stateCount < 2 || snapshotCount < 2) {
+    return '当前样本较少，结论主要基于已记录的少量状态。';
+  }
+  return null;
+}
+
+function buildOverallSummary(
+  dominantStateLabel: string,
+  blockers: DerivedBlocker[],
+  timeline: DerivedTimelineNode[],
+): string {
+  if (timeline.length === 0) {
+    return '这次 session 的过程样本还不够，暂时只能看到零散记录。';
+  }
+
+  const hasRecovery = timeline.some(
+    (node, index) =>
+      index > 0 &&
+      timeline[index - 1].blockerType !== null &&
+      node.blockerType === null &&
+      ['推进', '探索'].includes(node.stateGroup),
+  );
+  const primaryBlocker = blockers[0];
+
+  if (primaryBlocker && hasRecovery) {
+    return `这次学习大部分时间在${dominantStateLabel}，中间虽有${primaryBlocker.label}，但后面又找回了推进。`;
+  }
+
+  if (primaryBlocker) {
+    return `这次学习以${dominantStateLabel}为主，但中间被${primaryBlocker.label}明显打断。`;
+  }
+
+  return `这次学习整体比较平稳，以${dominantStateLabel}为主，没有出现明显长时间卡住。`;
+}
+
+function buildBlockerSummary(blockers: DerivedBlocker[], timeline: DerivedTimelineNode[]): string {
+  const primaryBlocker = blockers[0];
+  if (primaryBlocker) {
+    return `中间最明显的卡点是${primaryBlocker.label}，${primaryBlocker.evidenceSummary[0] ?? primaryBlocker.description}`;
+  }
+
+  if (timeline.length === 0) {
+    return '当前样本较少，还看不出明确卡点。';
+  }
+
+  return '中间没有出现明显的持续卡点，过程更多是在推进或定位问题。';
+}
+
+function buildEndingSummary(timeline: DerivedTimelineNode[]): string {
+  if (timeline.length === 0) {
+    return '当前样本较少，还看不清这次是如何结束的。';
+  }
+
+  const lastNode = timeline.at(-1);
+  const previousNode = timeline.at(-2);
+  if (!lastNode) {
+    return '当前样本较少，还看不清这次是如何结束的。';
+  }
+
+  if (previousNode?.blockerType && !lastNode.blockerType && ['推进', '探索'].includes(lastNode.stateGroup)) {
+    return `最后从${previousNode.primaryStateLabel}回到${lastNode.primaryStateLabel}后结束。`;
+  }
+
+  if (lastNode.blockerType) {
+    return `结束前仍停留在${lastNode.primaryStateLabel}，说明这轮还没完全解开卡点。`;
+  }
+
+  if (lastNode.stateGroup === '注意力') {
+    return `最后停在${lastNode.primaryStateLabel}，更像整理思路后结束。`;
+  }
+
+  return `最后停在${lastNode.primaryStateLabel}，说明这轮是在可继续推进的状态下结束的。`;
+}
+
 export function deriveSessionReport(report: SessionReportResponse): DerivedSessionReport {
   const points = normalizeStatePoints(report);
   const timeline = buildTimeline(points);
@@ -720,6 +909,7 @@ export function deriveSessionReport(report: SessionReportResponse): DerivedSessi
   const durationSec = clampDurationSec(toMs(String(sessionStart ?? '')), toMs(String(sessionEnd ?? '')));
   const recommendations = buildRecommendations(blockers, turningPoints);
   const primaryBlocker = blockers[0] ?? null;
+  const sampleHint = buildSampleHint(report.states.length, report.snapshots.length);
 
   return {
     overview: {
@@ -735,6 +925,10 @@ export function deriveSessionReport(report: SessionReportResponse): DerivedSessi
       turningPointCount: turningPoints.length,
       primaryBlockerLabel: primaryBlocker?.label ?? null,
       primaryBlockerReason: primaryBlocker?.evidenceSummary[0] ?? null,
+      overallSummary: buildOverallSummary(dominantState.label, blockers, timeline),
+      blockerSummary: buildBlockerSummary(blockers, timeline),
+      endingSummary: buildEndingSummary(timeline),
+      sampleHint,
     },
     timeline,
     turningPoints,
