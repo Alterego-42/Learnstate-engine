@@ -1,0 +1,1 @@
+export const FALLBACK_SESSION_ID = '79817554-4ec0-47eb-8905-da81ee44e4ee';
