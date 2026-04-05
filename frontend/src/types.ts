@@ -6,6 +6,10 @@ export type EventType =
   | 'cursor.pause'
   | 'clipboard.copy'
   | 'clipboard.paste'
+  | 'reference.open'
+  | 'reference.section_change'
+  | 'reference.scroll'
+  | 'reference.close'
   | 'run'
   | 'submit'
   | 'session.end';
