@@ -21,6 +21,10 @@ class EventItem(BaseModel):
             "run",
             "submit",
             "session.end",
+            "reference.open",
+            "reference.close",
+            "reference.section_change",
+            "reference.scroll",
         ],
     )
     event_time: datetime

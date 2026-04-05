@@ -80,10 +80,11 @@ def post_events(payload: EventBatchRequest) -> EventBatchResponse:
             window_end=ordered_events[-1]["event_time"].isoformat(),
             window_seconds=int(settings["snapshot_window_seconds"]),
         )
-        infer_and_write_state_vector_v1(
-            connection=connection,
-            feature_snapshot=snapshot,
-        )
+        if int((snapshot.get("feature_values") or {}).get("event_count", 0)) > 0:
+            infer_and_write_state_vector_v1(
+                connection=connection,
+                feature_snapshot=snapshot,
+            )
         cleanup_old_raw_events(connection, int(settings["raw_event_retention_days"]))
         refreshed_session = get_session_by_id(connection, session["session_id"])
         return EventBatchResponse(

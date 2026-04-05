@@ -22,6 +22,13 @@ SUPPORTED_EVENT_TYPES = {
     "session.end",
 }
 
+REFERENCE_EVENT_TYPES = {
+    "reference.open",
+    "reference.close",
+    "reference.section_change",
+    "reference.scroll",
+}
+
 
 def _payload_value(payload: dict[str, Any], *keys: str, default: Any = 0) -> Any:
     for key in keys:
@@ -80,6 +87,7 @@ def build_snapshot_for_session(
     normalized_rows.sort(key=lambda item: (item["event_time"], item["seq"]))
 
     filtered_rows = [row for row in normalized_rows if row["event_type"] in SUPPORTED_EVENT_TYPES]
+    reference_rows = [row for row in normalized_rows if row["event_type"] in REFERENCE_EVENT_TYPES]
     edit_rows = [row for row in filtered_rows if str(row["event_type"]).startswith("edit.")]
     edit_times = [row["event_time"] for row in edit_rows]
     edit_intervals_ms = [
@@ -143,6 +151,7 @@ def build_snapshot_for_session(
 
     feature_values = {
         "event_count": len(filtered_rows),
+        "reference_event_count": len(reference_rows),
         "edit_count": len(edit_rows),
         "insert_chars": insert_chars,
         "delete_chars": delete_chars,
