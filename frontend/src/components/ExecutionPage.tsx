@@ -8,6 +8,7 @@ import { useDaemonTasks } from '../hooks/useDaemonTasks';
 import { useEventReporter } from '../hooks/useEventReporter';
 import { useStatePolling } from '../hooks/useStatePolling';
 import { FALLBACK_SESSION_ID } from '../config/demo';
+import { getReferenceMaterial, type ReferenceSectionId } from '../config/referenceMaterials';
 import type { OutputEntry } from '../types';
 import { stableHash } from '../utils/hash';
 import { createStatusHistoryItems } from '../utils/state';
@@ -15,6 +16,7 @@ import { createStatusHistoryItems } from '../utils/state';
 const USER_LOCAL_ID = 'local-demo-user';
 const CURSOR_THROTTLE_MS = 250;
 const CURSOR_PAUSE_MS = 2000;
+const REFERENCE_SCROLL_THROTTLE_MS = 1000;
 
 const TEMPLATE_BY_TASK: Record<string, string> = {
   'demo-two-sum': `def two_sum(nums, target):
@@ -59,8 +61,10 @@ export function ExecutionPage({ onOpenReport }: ExecutionPageProps) {
     useDaemonTasks();
   const statePolling = useStatePolling(USER_LOCAL_ID, 3000);
   const [code, setCode] = useState(TEMPLATE_BY_TASK['demo-two-sum']);
+  const [referenceOpen, setReferenceOpen] = useState(true);
+  const [activeReferenceSection, setActiveReferenceSection] = useState<ReferenceSectionId>('goal');
   const [output, setOutput] = useState<OutputEntry[]>([
-    createOutputEntry('执行页已启动，等待编辑事件进入 /api/events。', 'info'),
+    createOutputEntry('学习工作台已就绪：左侧写代码，上方参考区可随时查看。', 'info'),
   ]);
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -68,6 +72,8 @@ export function ExecutionPage({ onOpenReport }: ExecutionPageProps) {
   const fileHashRef = useRef('f_bootstrap');
   const lastCursorEmitAtRef = useRef(0);
   const lastCursorOffsetRef = useRef(0);
+  const referenceOpenRef = useRef(true);
+  const lastReferenceScrollEmitAtRef = useRef(0);
   const pauseTimerRef = useRef<number | null>(null);
 
   const pushOutput = useCallback((text: string, tone: OutputEntry['tone'] = 'info') => {
@@ -85,14 +91,32 @@ export function ExecutionPage({ onOpenReport }: ExecutionPageProps) {
       void statePolling.refresh();
     },
   });
+  const recordEvent = reporter.recordEvent;
 
   useEffect(() => {
     if (!selectedTask?.task_id) {
       return;
     }
+
+    const referenceMaterial = getReferenceMaterial(selectedTask);
     setCode(TEMPLATE_BY_TASK[selectedTask.task_id] ?? '# Start coding here\n');
-    pushOutput(`已切换任务：${selectedTask.title}`, 'info');
-  }, [pushOutput, selectedTask]);
+    setActiveReferenceSection('goal');
+    lastReferenceScrollEmitAtRef.current = 0;
+    pushOutput(`已切换练习任务：${selectedTask.title}`, 'info');
+
+    if (referenceOpenRef.current) {
+      recordEvent(
+        'reference.open',
+        {
+          reference_id: referenceMaterial.referenceId,
+          section_id: 'goal',
+          task_title: referenceMaterial.taskTitle,
+          open_reason: 'task_switch',
+        },
+        'reference-panel',
+      );
+    }
+  }, [pushOutput, recordEvent, selectedTask]);
 
   const bindPauseTimer = useCallback(() => {
     if (!editorRef.current) {
@@ -335,7 +359,87 @@ export function ExecutionPage({ onOpenReport }: ExecutionPageProps) {
     await statePolling.refresh();
   }, [pushOutput, reporter, statePolling]);
 
-  const pageTitle = useMemo(() => selectedTask?.title ?? '执行页 MVP', [selectedTask]);
+  const handleToggleReference = useCallback(
+    (nextOpen: boolean) => {
+      referenceOpenRef.current = nextOpen;
+      setReferenceOpen(nextOpen);
+
+      if (!selectedTask?.task_id) {
+        return;
+      }
+
+      const referenceMaterial = getReferenceMaterial(selectedTask);
+      recordEvent(
+        nextOpen ? 'reference.open' : 'reference.close',
+        {
+          reference_id: referenceMaterial.referenceId,
+          section_id: activeReferenceSection,
+          task_title: referenceMaterial.taskTitle,
+          toggle_reason: 'manual_toggle',
+        },
+        'reference-panel',
+      );
+    },
+    [activeReferenceSection, recordEvent, selectedTask],
+  );
+
+  const handleSelectReferenceSection = useCallback(
+    (nextSection: ReferenceSectionId) => {
+      if (!selectedTask?.task_id || nextSection === activeReferenceSection) {
+        return;
+      }
+
+      const referenceMaterial = getReferenceMaterial(selectedTask);
+      recordEvent(
+        'reference.section_change',
+        {
+          reference_id: referenceMaterial.referenceId,
+          from_section: activeReferenceSection,
+          to_section: nextSection,
+          task_title: referenceMaterial.taskTitle,
+        },
+        'reference-panel',
+      );
+      setActiveReferenceSection(nextSection);
+    },
+    [activeReferenceSection, recordEvent, selectedTask],
+  );
+
+  const handleReferenceScroll = useCallback(
+    (
+      sectionId: ReferenceSectionId,
+      scrollTop: number,
+      scrollHeight: number,
+      clientHeight: number,
+    ) => {
+      if (!selectedTask?.task_id) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastReferenceScrollEmitAtRef.current < REFERENCE_SCROLL_THROTTLE_MS) {
+        return;
+      }
+
+      lastReferenceScrollEmitAtRef.current = now;
+      const referenceMaterial = getReferenceMaterial(selectedTask);
+      const maxScrollTop = Math.max(scrollHeight - clientHeight, 1);
+      recordEvent(
+        'reference.scroll',
+        {
+          reference_id: referenceMaterial.referenceId,
+          section_id: sectionId,
+          task_title: referenceMaterial.taskTitle,
+          scroll_top: Math.round(scrollTop),
+          scroll_ratio: Number((scrollTop / maxScrollTop).toFixed(4)),
+        },
+        'reference-panel',
+      );
+    },
+    [recordEvent, selectedTask],
+  );
+
+  const pageTitle = useMemo(() => selectedTask?.title ?? '学习工作台', [selectedTask]);
   const reportSessionId = reporter.status.lastSessionId ?? statePolling.data?.current_session?.session_id ?? FALLBACK_SESSION_ID;
   const statusHistory = useMemo(() => createStatusHistoryItems(statePolling.history), [statePolling.history]);
   const syncState = useMemo(() => {
@@ -392,7 +496,7 @@ export function ExecutionPage({ onOpenReport }: ExecutionPageProps) {
     <div className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">React 执行页 MVP</p>
+          <p className="eyebrow">学习工作台</p>
           <h1>{pageTitle}</h1>
         </div>
         <div className="header-meta">
@@ -420,7 +524,12 @@ export function ExecutionPage({ onOpenReport }: ExecutionPageProps) {
             selectedTaskId={selectedTaskId}
             selectedTask={selectedTask}
             loading={tasksLoading}
+            referenceOpen={referenceOpen}
+            activeReferenceSection={activeReferenceSection}
             onSelectTask={setSelectedTaskId}
+            onToggleReference={handleToggleReference}
+            onSelectReferenceSection={handleSelectReferenceSection}
+            onReferenceScroll={handleReferenceScroll}
           />
           <MonacoWorkbench
             code={code}
