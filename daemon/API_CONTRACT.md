@@ -80,6 +80,13 @@
 
 用途：前端批量提交行为事件；daemon 自动管理 session，并写入 `RawEvent` + `FeatureSnapshot`。
 
+参考区事件本轮采用“采集保留、暂不纳入主要推理”口径：
+
+- 已支持写入 `raw_events` 的事件类型：`reference.open`、`reference.close`、`reference.section_change`、`reference.scroll`
+- 推荐前端在 `payload_summary` 里携带最小字段：`seq`、`reference_id`、`section_id`、`scroll_ratio`、`duration_ms`
+- `FeatureSnapshot v1` 仅侧记 `reference_event_count`，不把 `reference.*` 混入 `event_count / edit_count / run_count`
+- 若当前窗口只有 `reference.*` 事件，daemon 仍写 `FeatureSnapshot`，但默认跳过本轮 `StateVector` 推理写回，避免空特征污染主状态链路
+
 请求示例：
 
 ```json
@@ -117,6 +124,16 @@
         "result": "error"
       },
       "source": "runner"
+    },
+    {
+      "event_type": "reference.section_change",
+      "event_time": "2026-04-04T15:00:09Z",
+      "payload_summary": {
+        "seq": 104,
+        "reference_id": "two-sum-guide",
+        "section_id": "hash-map-idea"
+      },
+      "source": "reference-panel"
     }
   ]
 }
@@ -145,6 +162,7 @@
     "window_end": "2026-04-04T15:00:08+00:00",
     "feature_values": {
       "event_count": 3,
+      "reference_event_count": 1,
       "edit_count": 1,
       "insert_chars": 18,
       "delete_chars": 0,
@@ -172,6 +190,7 @@
 `FeatureSnapshot v1` 实际字段：
 
 - `event_count`
+- `reference_event_count`
 - `edit_count`
 - `insert_chars`
 - `delete_chars`
@@ -201,6 +220,7 @@
 说明：
 
 - 若推理模块尚未写回 `StateVector`，`latest_state` 返回 `null`
+- 若最近一批只有 `reference.*` 事件，`latest_snapshot` 会更新，但 `latest_state` 默认沿用上一条状态或保持 `null`
 
 ## `GET /api/state/history`
 

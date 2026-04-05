@@ -45,6 +45,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8765
 - SQLite 文件仅落在本地 `daemon/data/mvp_local.db`
 - `payload_summary` 入库前会脱敏，拒绝源码类字段
 - 不保存原始代码文本，只保存行为摘要
+- 参考区事件 `reference.open / reference.close / reference.section_change / reference.scroll` 本轮仅做采集保留：可写入 `raw_events`，并在 `FeatureSnapshot` 侧记 `reference_event_count`，默认不进入首版主推理公式
+- 参考区前端建议先只传 `payload_summary.seq / reference_id / section_id / scroll_ratio / duration_ms`，不需要新增 daemon HTTP 接口
 
 ## StateVector 写回
 
