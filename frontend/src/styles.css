@@ -506,7 +506,6 @@ h2 {
 }
 
 .report-conclusion-grid,
-.report-process-grid,
 .report-evidence-grid {
   display: grid;
   gap: 16px;
@@ -517,49 +516,15 @@ h2 {
   margin-top: 18px;
 }
 
-.report-conclusion-card,
-.report-process-card {
+.report-conclusion-card {
   padding: 16px;
   border-radius: 16px;
   background: rgba(30, 41, 59, 0.72);
 }
 
-.report-conclusion-card p,
-.report-process-card p {
+.report-conclusion-card p {
   margin: 10px 0 0;
   color: #e2e8f0;
-}
-
-.report-process-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 18px;
-}
-
-.report-process-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.report-process-index,
-.report-process-stat {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-}
-
-.report-process-index {
-  background: rgba(125, 211, 252, 0.16);
-  color: #bae6fd;
-}
-
-.report-process-stat {
-  background: rgba(148, 163, 184, 0.14);
-  color: #cbd5f5;
 }
 
 .report-evidence-grid {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FALLBACK_SESSION_ID } from '../config/demo';
 import { useSessionReport } from '../hooks/useSessionReport';
-import { formatClockLabel, formatDurationLabel } from '../utils/report';
+import { REPORT_GENERATION_STEPS, formatClockLabel, formatDurationLabel } from '../utils/report';
 
 interface SessionReportPageProps {
   sessionId: string;
@@ -39,41 +39,18 @@ export function SessionReportPage({ sessionId, onSessionIdChange, onBack }: Sess
     ];
   }, [report.data, report.derived]);
 
-  const processSteps = useMemo(() => {
-    if (!report.derived) {
-      return [];
+  const reportProcessCaption = useMemo(() => {
+    if (!report.data || !report.derived) {
+      return '这份复盘会直接读取本地已记录的 session 数据、特征快照和状态结果，再即时聚合成结论。';
     }
 
-    return [
-      {
-        id: 'events',
-        title: '记录学习行为',
-        stat:
-          typeof report.derived.overview.eventCount === 'number'
-            ? `${report.derived.overview.eventCount} 个事件`
-            : '事件数待汇总',
-        text: '先记录编辑、运行、停顿这些真实学习动作。',
-      },
-      {
-        id: 'snapshots',
-        title: '切成过程快照',
-        stat: `${report.derived.overview.snapshotCount} 个快照`,
-        text: '把连续行为按时间窗口整理成过程片段，避免只看某一瞬间。',
-      },
-      {
-        id: 'states',
-        title: '判断学习阶段',
-        stat: `${report.derived.overview.stateCount} 次状态判断`,
-        text: '把每段过程翻译成“推进 / 探索 / 卡住”等可读阶段。',
-      },
-      {
-        id: 'report',
-        title: '生成复盘结论',
-        stat: `${report.derived.overview.turningPointCount} 个转折 / ${report.derived.recommendations.length} 条建议`,
-        text: '最后只保留最关键的转折、卡点和下一步建议。',
-      },
-    ];
-  }, [report.derived]);
+    const eventCountLabel =
+      typeof report.derived.overview.eventCount === 'number'
+        ? `${report.derived.overview.eventCount} 条行为事件`
+        : '本地行为事件';
+
+    return `为什么生成很快：它不是临时猜出来的，而是直接读取 session ${report.data.session.session_id} 已记录的 ${eventCountLabel}、${report.derived.overview.snapshotCount} 个特征快照和 ${report.derived.overview.stateCount} 个状态点，在本地即时聚合成时间线、转折点和建议。`;
+  }, [report.data, report.derived]);
 
   const conclusionCards = useMemo(() => {
     if (!report.derived) {
@@ -239,16 +216,17 @@ export function SessionReportPage({ sessionId, onSessionIdChange, onBack }: Sess
               </div>
             </div>
             <p className="section-intro">这部分在看什么：说明这份复盘是怎样从真实学习过程里整理出来的。</p>
+            <p className="report-process-caption">{reportProcessCaption}</p>
 
-            <div className="report-process-grid">
-              {processSteps.map((step, index) => (
-                <article key={step.id} className="report-process-card">
-                  <div className="report-process-top">
-                    <span className="report-process-index">0{index + 1}</span>
-                    <span className="report-process-stat">{step.stat}</span>
+            <div className="report-process-flow" aria-label="复盘生成流程">
+              {REPORT_GENERATION_STEPS.map((step) => (
+                <article key={step.step} className="report-process-step">
+                  <div className="report-process-step-head">
+                    <span className="report-process-step-index">{step.step}</span>
+                    <strong>{step.title}</strong>
                   </div>
-                  <strong>{step.title}</strong>
-                  <p>{step.text}</p>
+                  <p>{step.description}</p>
+                  <span className="report-process-step-hint">{step.dataHint}</span>
                 </article>
               ))}
             </div>
